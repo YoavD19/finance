@@ -38,6 +38,7 @@ def run_query(query_str, engine, params=None):
         conn.execute(query, params)
 
 def return_run_query(query_str, engine, params=None):
+    "return a query not as a DataFrame"
 
     params = params or {}
 
