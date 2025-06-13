@@ -13,7 +13,7 @@ host = st.secrets["postgres"]["host"]
 port = st.secrets["postgres"]["port"]
 database = st.secrets["postgres"]["database"]
 
-engine = create_db(user, password, host, port, database)
+db = create_db(user, password, host, port, database)
 
 # Initialize session state for page navigation
 if "page" not in st.session_state:
@@ -39,8 +39,8 @@ if st.session_state.page == "Home":
 
 #Login page  
 elif st.session_state.page == "Login":
-    df_login = pd.read_sql("SELECT uname,pword FROM users", engine)
-    user_pass_dict = df_login.set_index('uname')['pword'].to_dict()
+    users = return_run_query(database=db, query_str="SELECT uname,pword FROM users")
+    user_pass_dict = {user[0]: user[1] for user in users}
     st.title("Login")
     with st.form("Login Form"):
         username = st.text_input("Username")
@@ -73,7 +73,7 @@ elif st.session_state.page == "Signup":
                 st.error("Please fill in all fields.")
             else:
                 try:
-                    run_query("INSERT INTO users (uname, pword, email) VALUES (:username, :password, :email)",
+                    run_query(database=db, query_str="INSERT INTO users (uname, pword, email) VALUES (:username, :password, :email)",
                               params={"username": username, "password": password, "email": email}
                               )
                     st.session_state.username = username
@@ -108,8 +108,8 @@ elif st.session_state.page == "Charts":
         st.session_state.selected_accounts = []
 
     left, right = st.columns(2)
-    accounts_list = return_run_query("SELECT account_num FROM accounts WHERE uname = :username",
-                                       {"username": st.session_state.username})
+    accounts_list = return_run_query(database=db, query_str="SELECT account_num FROM accounts WHERE uname = :username",
+                                       params={"username": st.session_state.username})
     account_options = [account[0] for account in accounts_list]
 
     if left.button("Separated Accounts", use_container_width=True):
@@ -146,8 +146,8 @@ elif st.session_state.page == "Tables":
 
     left, right = st.columns(2)
 
-    accounts_list = return_run_query("SELECT account_num FROM accounts WHERE uname = :username",
-            {"username": st.session_state.username})
+    accounts_list = return_run_query(database=db, query_str="SELECT account_num FROM accounts WHERE uname = :username",
+            params={"username": st.session_state.username})
     account_options = [account[0] for account in accounts_list]
 
     
@@ -161,7 +161,7 @@ elif st.session_state.page == "Tables":
         st.subheader("Latest Data")
         st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
         # Execute the query with the selected accounts
-        df = read_query_df("""SELECT account_num "Account Number",
+        df = read_query_df(database=db, query_str="""SELECT account_num "Account Number",
                                 company_t "Company",
                                 ctype_t "Company Type",
                                 plan_t "Plan",
@@ -193,7 +193,7 @@ elif st.session_state.page == "Tables":
     if st.session_state.table == "All Data":
         st.subheader("All Data")
         st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
-        df = read_query_df(""" SELECT accounts.account_num "Account Number",
+        df = read_query_df(database=db, query_str=""" SELECT accounts.account_num "Account Number",
                                     companies.company_t "Company",
                                     company_types.ctype_t "Company Type",
                                     financial_plans.plan_t "Plan",
@@ -238,9 +238,9 @@ elif st.session_state.page == "Insert":
     if st.session_state.form == "Add Account Form":
         with st.form("Add Account Form"):
             account_num = st.text_input("Account Number")
-            companies = return_run_query("SELECT company_t FROM companies")
-            plans = return_run_query("SELECT plan_t FROM financial_plans")
-            paths = return_run_query("SELECT fin_path_t FROM paths")
+            companies = return_run_query(database=db, query_str="SELECT company_t FROM companies")
+            plans = return_run_query(database=db, query_str="SELECT plan_t FROM financial_plans")
+            paths = return_run_query(database=db, query_str="SELECT fin_path_t FROM paths")
             company = st.selectbox("Company", [company[0] for company in companies])
             plan = st.selectbox("Financial Plan", [plan[0] for plan in plans])
             fin_path = st.selectbox("Financial Path", [path[0] for path in paths])
@@ -250,7 +250,7 @@ elif st.session_state.page == "Insert":
                     st.error("Please enter an account number.")
                 else:
                     try:
-                        run_query("""INSERT INTO accounts (uname, company, account_num, plan, fin_path)
+                        run_query(database=db, query_str="""INSERT INTO accounts (uname, company, account_num, plan, fin_path)
                                         SELECT
                                         :username AS uname,
                                         (SELECT company FROM companies WHERE company_t = :company),
@@ -274,8 +274,8 @@ elif st.session_state.page == "Insert":
     elif st.session_state.form == "Update Account Form":
         with st.form("Update Account Form"):
             # Fetch accounts for the current user
-            accounts = return_run_query("SELECT account_num FROM accounts WHERE uname = :username",
-                                          {"username": st.session_state.username})
+            accounts = return_run_query(database=db, query_str="SELECT account_num FROM accounts WHERE uname = :username",
+                                          params={"username": st.session_state.username})
             account_num = st.selectbox("Select Account", [account[0] for account in accounts])
             money = st.number_input("Money", step=1000.00, min_value=0.00, max_value=99999999.99)
             year = st.number_input("Year", step=1, min_value=2000, max_value=pd.Timestamp.now().year, value=pd.Timestamp.now().year)
@@ -287,7 +287,7 @@ elif st.session_state.page == "Insert":
                     st.error("Please select an account.")
                 else:
                     try:
-                        run_query("""INSERT INTO updates (account_num, money, begda)
+                        run_query(database=db, query_str="""INSERT INTO updates (account_num, money, begda)
                                     VALUES (:account_num, :money, :begda)
                                   ON CONFLICT (account_num, begda) DO UPDATE
                                     SET money = EXCLUDED.money""",

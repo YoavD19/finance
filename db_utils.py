@@ -5,7 +5,8 @@ def create_db(user, password, host, port, database):
 
     return create_engine(f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}')
 
-def read_query_df(query_str, engine, params=None):
+
+def read_query_df(database, query_str, params=None):
 
     params = params or {}
 
@@ -18,10 +19,10 @@ def read_query_df(query_str, engine, params=None):
 
     query = text(query_str).bindparams(*bind_params)
 
-    return pd.read_sql_query(query, engine, params=params)
+    return pd.read_sql_query(query, database, params=params)
 
 
-def run_query(query_str, engine, params=None):
+def run_query(database, query_str, params=None):
 
     params = params or {}
 
@@ -34,10 +35,10 @@ def run_query(query_str, engine, params=None):
 
     query = text(query_str).bindparams(*bind_params)
 
-    with engine.begin() as conn:
+    with database.begin() as conn:
         conn.execute(query, params)
 
-def return_run_query(query_str, engine, params=None):
+def return_run_query(database, query_str, params=None):
     "return a query not as a DataFrame"
 
     params = params or {}
@@ -51,6 +52,6 @@ def return_run_query(query_str, engine, params=None):
 
     query = text(query_str).bindparams(*bind_params)
 
-    with engine.begin() as conn:
+    with database.begin() as conn:
         return conn.execute(query, params).fetchall()
 
