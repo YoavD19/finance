@@ -2,6 +2,7 @@
 from sqlalchemy.exc import IntegrityError, DataError
 import pandas as pd
 import streamlit as st
+import plotly.express as px
 import time
 from pages_utils import goto_page, goto_page_if_logged_in
 from db_utils import read_query_df, run_query, return_run_query, cache_read_query
@@ -116,11 +117,33 @@ elif st.session_state.page == "Charts":
     if st.session_state.chart == "Separated Accounts":
         st.subheader("Separated Accounts")
         st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
+        df=read_query_df(query_str="""SELECT account_num "Account Number",
+                                money "Amount Of Money",
+                                begda "Date"
+                                FROM updates
+                                WHERE account_num in :accounts
+                                ORDER BY begda""",
+                               params={"accounts": st.session_state.selected_accounts, "username": st.session_state.username})
+
 
     if st.session_state.chart == "Combined Accounts":
         st.subheader("Combined Accounts")
         st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
+        df=read_query_df(query_str="""SELECT sum(money) "Amount Of Money",
+                                begda "Date"
+                                FROM updates
+                                WHERE account_num in :accounts
+                                GROUP BY begda
+                                ORDER BY begda""",
+                               params={"accounts": st.session_state.selected_accounts, "username": st.session_state.username})
 
+
+    try:
+        fig = px.line(df, x="Date", y="Amount Of Money", color="Account Number" if st.session_state.chart == "Separated Accounts" else None)
+        fig.update_xaxes(tickformat="%b %Y")
+        st.plotly_chart(fig, use_container_width=True)
+    except NameError:
+        st.info("Please select a table to display data.")
 #Tables page
 elif st.session_state.page == "Tables":
     st.title("Tables")
