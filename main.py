@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 import time
 from pages_utils import goto_page, goto_page_if_logged_in
-from db_utils import read_query_df, run_query, return_run_query
+from db_utils import read_query_df, run_query, return_run_query, cache_read_query
 
 # Create database connection
 
@@ -231,9 +231,9 @@ elif st.session_state.page == "Insert":
     if st.session_state.form == "Add Account Form":
         with st.form("Add Account Form"):
             account_num = st.text_input("Account Number")
-            companies = return_run_query(query_str="SELECT company_t FROM companies")
-            plans = return_run_query(query_str="SELECT plan_t FROM financial_plans")
-            paths = return_run_query(query_str="SELECT fin_path_t FROM paths")
+            companies = cache_read_query(query_str="SELECT company_t FROM companies")
+            plans = cache_read_query(query_str="SELECT plan_t FROM financial_plans")
+            paths = cache_read_query(query_str="SELECT fin_path_t FROM paths")
             company = st.selectbox("Company", [company[0] for company in companies])
             plan = st.selectbox("Financial Plan", [plan[0] for plan in plans])
             fin_path = st.selectbox("Financial Path", [path[0] for path in paths])
