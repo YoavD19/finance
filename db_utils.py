@@ -1,11 +1,18 @@
 from sqlalchemy import text, bindparam, create_engine
 import pandas as pd
+from streamlit import secrets, cache_data
 
-def create_db(user, password, host, port, database):
 
-    return create_engine(f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}')
+user = secrets["postgres"]["user"]
+password = secrets["postgres"]["password"]
+host = secrets["postgres"]["host"]
+port = secrets["postgres"]["port"]
+database = secrets["postgres"]["database"]
 
-def read_query_df(query_str, engine, params=None):
+engine = create_engine(f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}')
+
+
+def read_query_df(query_str, params=None):
 
     params = params or {}
 
@@ -21,7 +28,7 @@ def read_query_df(query_str, engine, params=None):
     return pd.read_sql_query(query, engine, params=params)
 
 
-def run_query(query_str, engine, params=None):
+def run_query(query_str, params=None):
 
     params = params or {}
 
@@ -37,7 +44,7 @@ def run_query(query_str, engine, params=None):
     with engine.begin() as conn:
         conn.execute(query, params)
 
-def return_run_query(query_str, engine, params=None):
+def return_run_query(query_str, params=None):
     "return a query not as a DataFrame"
 
     params = params or {}
@@ -53,4 +60,9 @@ def return_run_query(query_str, engine, params=None):
 
     with engine.begin() as conn:
         return conn.execute(query, params).fetchall()
+    
+@cache_data
+def cache_read_query(query_str, params=None):
+    
+    return return_run_query(query_str, params)
 

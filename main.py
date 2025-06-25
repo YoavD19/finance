@@ -2,18 +2,15 @@
 from sqlalchemy.exc import IntegrityError, DataError
 import pandas as pd
 import streamlit as st
+import plotly.express as px
 import time
 from pages_utils import goto_page, goto_page_if_logged_in
-from db_utils import read_query_df, run_query, return_run_query, create_db
-    
-# connect to DB
-user = st.secrets["postgres"]["user"]
-password = st.secrets["postgres"]["password"]
-host = st.secrets["postgres"]["host"]
-port = st.secrets["postgres"]["port"]
-database = st.secrets["postgres"]["database"]
+from db_utils import read_query_df, run_query, return_run_query, cache_read_query
 
-engine = create_db(user, password, host, port, database)
+st.set_page_config(
+    page_title="Finance Management",       # Title shown in the browser tab
+    page_icon="💸",                # Icon shown in the browser tab
+    )
 
 # Initialize session state for page navigation
 if "page" not in st.session_state:
@@ -39,8 +36,8 @@ if st.session_state.page == "Home":
 
 #Login page  
 elif st.session_state.page == "Login":
-    df_login = pd.read_sql("SELECT uname,pword FROM users", engine)
-    user_pass_dict = df_login.set_index('uname')['pword'].to_dict()
+    users = return_run_query(query_str="SELECT uname,pword FROM users")
+    user_pass_dict = {user[0]: user[1] for user in users}
     st.title("Login")
     with st.form("Login Form"):
         username = st.text_input("Username")
@@ -73,7 +70,7 @@ elif st.session_state.page == "Signup":
                 st.error("Please fill in all fields.")
             else:
                 try:
-                    run_query("INSERT INTO users (uname, pword, email) VALUES (:username, :password, :email)",
+                    run_query(query_str="INSERT INTO users (uname, pword, email) VALUES (:username, :password, :email)",
                               params={"username": username, "password": password, "email": email}
                               )
                     st.session_state.username = username
@@ -108,8 +105,8 @@ elif st.session_state.page == "Charts":
         st.session_state.selected_accounts = []
 
     left, right = st.columns(2)
-    accounts_list = return_run_query("SELECT account_num FROM accounts WHERE uname = :username",
-                                       {"username": st.session_state.username})
+    accounts_list = return_run_query(query_str="SELECT account_num FROM accounts WHERE uname = :username",
+                                       params={"username": st.session_state.username})
     account_options = [account[0] for account in accounts_list]
 
     if left.button("Separated Accounts", use_container_width=True):
@@ -123,11 +120,33 @@ elif st.session_state.page == "Charts":
     if st.session_state.chart == "Separated Accounts":
         st.subheader("Separated Accounts")
         st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
+        df=read_query_df(query_str="""SELECT account_num "Account Number",
+                                money "Amount Of Money",
+                                begda "Date"
+                                FROM updates
+                                WHERE account_num in :accounts
+                                ORDER BY begda""",
+                               params={"accounts": st.session_state.selected_accounts, "username": st.session_state.username})
+
 
     if st.session_state.chart == "Combined Accounts":
         st.subheader("Combined Accounts")
         st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
+        df=read_query_df(query_str="""SELECT sum(money) "Amount Of Money",
+                                begda "Date"
+                                FROM updates
+                                WHERE account_num in :accounts
+                                GROUP BY begda
+                                ORDER BY begda""",
+                               params={"accounts": st.session_state.selected_accounts, "username": st.session_state.username})
 
+
+    try:
+        fig = px.line(df, x="Date", y="Amount Of Money", color="Account Number" if st.session_state.chart == "Separated Accounts" else None)
+        fig.update_xaxes(tickformat="%b %Y", dtick="M1")
+        st.plotly_chart(fig, use_container_width=True)
+    except NameError:
+        st.info("Please select a chart to display data.")
 #Tables page
 elif st.session_state.page == "Tables":
     st.title("Tables")
@@ -146,8 +165,8 @@ elif st.session_state.page == "Tables":
 
     left, right = st.columns(2)
 
-    accounts_list = return_run_query("SELECT account_num FROM accounts WHERE uname = :username",
-            {"username": st.session_state.username})
+    accounts_list = return_run_query(query_str="SELECT account_num FROM accounts WHERE uname = :username",
+            params={"username": st.session_state.username})
     account_options = [account[0] for account in accounts_list]
 
     
@@ -161,7 +180,7 @@ elif st.session_state.page == "Tables":
         st.subheader("Latest Data")
         st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
         # Execute the query with the selected accounts
-        df = read_query_df("""SELECT account_num "Account Number",
+        df = read_query_df(query_str="""SELECT account_num "Account Number",
                                 company_t "Company",
                                 ctype_t "Company Type",
                                 plan_t "Plan",
@@ -193,7 +212,7 @@ elif st.session_state.page == "Tables":
     if st.session_state.table == "All Data":
         st.subheader("All Data")
         st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
-        df = read_query_df(""" SELECT accounts.account_num "Account Number",
+        df = read_query_df(query_str=""" SELECT accounts.account_num "Account Number",
                                     companies.company_t "Company",
                                     company_types.ctype_t "Company Type",
                                     financial_plans.plan_t "Plan",
@@ -238,9 +257,9 @@ elif st.session_state.page == "Insert":
     if st.session_state.form == "Add Account Form":
         with st.form("Add Account Form"):
             account_num = st.text_input("Account Number")
-            companies = return_run_query("SELECT company_t FROM companies")
-            plans = return_run_query("SELECT plan_t FROM financial_plans")
-            paths = return_run_query("SELECT fin_path_t FROM paths")
+            companies = cache_read_query(query_str="SELECT company_t FROM companies")
+            plans = cache_read_query(query_str="SELECT plan_t FROM financial_plans")
+            paths = cache_read_query(query_str="SELECT fin_path_t FROM paths")
             company = st.selectbox("Company", [company[0] for company in companies])
             plan = st.selectbox("Financial Plan", [plan[0] for plan in plans])
             fin_path = st.selectbox("Financial Path", [path[0] for path in paths])
@@ -250,7 +269,7 @@ elif st.session_state.page == "Insert":
                     st.error("Please enter an account number.")
                 else:
                     try:
-                        run_query("""INSERT INTO accounts (uname, company, account_num, plan, fin_path)
+                        run_query(query_str="""INSERT INTO accounts (uname, company, account_num, plan, fin_path)
                                         SELECT
                                         :username AS uname,
                                         (SELECT company FROM companies WHERE company_t = :company),
@@ -272,22 +291,30 @@ elif st.session_state.page == "Insert":
 
     # update account form
     elif st.session_state.form == "Update Account Form":
-        with st.form("Update Account Form"):
+        with st.container(border=True):
             # Fetch accounts for the current user
-            accounts = return_run_query("SELECT account_num FROM accounts WHERE uname = :username",
-                                          {"username": st.session_state.username})
+            accounts = return_run_query(query_str="SELECT account_num FROM accounts WHERE uname = :username",
+                                          params={"username": st.session_state.username})
             account_num = st.selectbox("Select Account", [account[0] for account in accounts])
+            account_info = return_run_query(query_str="""SELECT company_t, plan_t, fin_path_t, company_link
+                                    FROM accounts
+                                    INNER JOIN companies ON accounts.company = companies.company
+                                    INNER JOIN financial_plans ON accounts.plan = financial_plans.plan
+                                    INNER JOIN paths ON accounts.fin_path = paths.fin_path
+                                    WHERE account_num = :account_num""",
+                                          params={"account_num": account_num})
+            st.link_button(f"{account_info[0][0]} | {account_info[0][1]} | {account_info[0][2]}🔗", account_info[0][3])
             money = st.number_input("Money", step=1000.00, min_value=0.00, max_value=99999999.99)
             year = st.number_input("Year", step=1, min_value=2000, max_value=pd.Timestamp.now().year, value=pd.Timestamp.now().year)
             month = st.number_input("Month", step=1, min_value=1, max_value=12, value=pd.Timestamp.now().month)
             begda = pd.Timestamp(year=year, month=month, day=1)
-            submit_button = st.form_submit_button("Update")
+            submit_button = st.button("Update")
             if submit_button:
                 if account_num == '':
                     st.error("Please select an account.")
                 else:
                     try:
-                        run_query("""INSERT INTO updates (account_num, money, begda)
+                        run_query(query_str="""INSERT INTO updates (account_num, money, begda)
                                     VALUES (:account_num, :money, :begda)
                                   ON CONFLICT (account_num, begda) DO UPDATE
                                     SET money = EXCLUDED.money""",
