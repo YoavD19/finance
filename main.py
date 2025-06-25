@@ -7,7 +7,10 @@ import time
 from pages_utils import goto_page, goto_page_if_logged_in
 from db_utils import read_query_df, run_query, return_run_query, cache_read_query
 
-# Create database connection
+st.set_page_config(
+    page_title="Finance Management",       # Title shown in the browser tab
+    page_icon="💸",                # Icon shown in the browser tab
+    )
 
 # Initialize session state for page navigation
 if "page" not in st.session_state:
@@ -140,10 +143,10 @@ elif st.session_state.page == "Charts":
 
     try:
         fig = px.line(df, x="Date", y="Amount Of Money", color="Account Number" if st.session_state.chart == "Separated Accounts" else None)
-        fig.update_xaxes(tickformat="%b %Y")
+        fig.update_xaxes(tickformat="%b %Y", dtick="M1")
         st.plotly_chart(fig, use_container_width=True)
     except NameError:
-        st.info("Please select a table to display data.")
+        st.info("Please select a chart to display data.")
 #Tables page
 elif st.session_state.page == "Tables":
     st.title("Tables")
@@ -288,16 +291,24 @@ elif st.session_state.page == "Insert":
 
     # update account form
     elif st.session_state.form == "Update Account Form":
-        with st.form("Update Account Form"):
+        with st.container(border=True):
             # Fetch accounts for the current user
             accounts = return_run_query(query_str="SELECT account_num FROM accounts WHERE uname = :username",
                                           params={"username": st.session_state.username})
             account_num = st.selectbox("Select Account", [account[0] for account in accounts])
+            account_info = return_run_query(query_str="""SELECT company_t, plan_t, fin_path_t, company_link
+                                    FROM accounts
+                                    INNER JOIN companies ON accounts.company = companies.company
+                                    INNER JOIN financial_plans ON accounts.plan = financial_plans.plan
+                                    INNER JOIN paths ON accounts.fin_path = paths.fin_path
+                                    WHERE account_num = :account_num""",
+                                          params={"account_num": account_num})
+            st.link_button(f"{account_info[0][0]} | {account_info[0][1]} | {account_info[0][2]}🔗", account_info[0][3])
             money = st.number_input("Money", step=1000.00, min_value=0.00, max_value=99999999.99)
             year = st.number_input("Year", step=1, min_value=2000, max_value=pd.Timestamp.now().year, value=pd.Timestamp.now().year)
             month = st.number_input("Month", step=1, min_value=1, max_value=12, value=pd.Timestamp.now().month)
             begda = pd.Timestamp(year=year, month=month, day=1)
-            submit_button = st.form_submit_button("Update")
+            submit_button = st.button("Update")
             if submit_button:
                 if account_num == '':
                     st.error("Please select an account.")
