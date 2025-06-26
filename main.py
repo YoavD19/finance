@@ -8,7 +8,7 @@ from pages_utils import goto_page, goto_page_if_logged_in
 from db_utils import read_query_df, run_query, return_run_query, cache_read_query, hash_password, check_password
 
 st.set_page_config(
-    page_title="Finance Management",       # Title shown in the browser tab
+    page_title="StackSight",       # Title shown in the browser tab
     page_icon="💸",                # Icon shown in the browser tab
     )
 
