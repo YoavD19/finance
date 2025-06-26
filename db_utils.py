@@ -1,6 +1,7 @@
 from sqlalchemy import text, bindparam, create_engine
 import pandas as pd
 from streamlit import secrets, cache_data
+import bcrypt
 
 
 user = secrets["postgres"]["user"]
@@ -66,3 +67,12 @@ def cache_read_query(query_str, params=None):
     
     return return_run_query(query_str, params)
 
+def hash_password(password):
+    """Hash a password using bcrypt."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+def check_password(password, hashed):
+    """Check a password against a hashed password."""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))

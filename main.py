@@ -5,7 +5,7 @@ import streamlit as st
 import plotly.express as px
 import time
 from pages_utils import goto_page, goto_page_if_logged_in
-from db_utils import read_query_df, run_query, return_run_query, cache_read_query
+from db_utils import read_query_df, run_query, return_run_query, cache_read_query, hash_password, check_password
 
 st.set_page_config(
     page_title="Finance Management",       # Title shown in the browser tab
@@ -44,7 +44,7 @@ elif st.session_state.page == "Login":
         password = st.text_input("Password", type="password")
         submit_button = st.form_submit_button("Login")
         if submit_button:
-            if username in user_pass_dict and user_pass_dict[username] == password:
+            if username in user_pass_dict and check_password(password, user_pass_dict[username]):
                 st.success(f"Welcome {username}!")
                 st.session_state.username = username
                 time.sleep(1)
@@ -71,7 +71,7 @@ elif st.session_state.page == "Signup":
             else:
                 try:
                     run_query(query_str="INSERT INTO users (uname, pword, email) VALUES (:username, :password, :email)",
-                              params={"username": username, "password": password, "email": email}
+                              params={"username": username, "password": hash_password(password), "email": email}
                               )
                     st.session_state.username = username
                     st.success(f"Account created for {username}!")
