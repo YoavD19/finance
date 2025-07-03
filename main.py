@@ -5,7 +5,7 @@ import streamlit as st
 import plotly.express as px
 import time
 from pages_utils import goto_page, goto_page_if_logged_in
-from db_utils import read_query_df, run_query, return_run_query, cache_read_query, hash_password, check_password
+from db_utils import read_query_df, run_query, return_run_query, cache_read_query, hash_password, check_password, cache_general_data
 
 st.set_page_config(
     page_title="StackSight",       # Title shown in the browser tab
@@ -101,48 +101,101 @@ elif st.session_state.page == "Charts":
     if "chart" not in st.session_state:  # Initialize chart state
         st.session_state.chart = None
 
-    if "selected_accounts" not in st.session_state:  # Initialize selected accounts state
-        st.session_state.selected_accounts = []
+    if "selected_filters" not in st.session_state:  # Initialize selected filters state
+        st.session_state.selected_filters = []
+
+    if "filter" not in st.session_state:  # Initialize filter state
+        st.session_state.filter = "account_num"
 
     left, right = st.columns(2)
-    accounts_list = return_run_query(query_str="SELECT account_num FROM accounts WHERE uname = :username",
+
+    filter_dict = cache_general_data({"Account Number": "account_num",
+                   "Company": "company_t",
+                   "Company Type": "ctype_t",
+                   "Financial Plan": "plan_t",
+                   "Financial Path": "fin_path_t"})
+    
+    
+
+    if left.button("Separated", use_container_width=True):
+        st.session_state.chart = "Separated"
+        st.session_state.selected_filters = []  # Update selected accounts state
+
+    if right.button("Combined", use_container_width=True):
+        st.session_state.chart = "Combined"
+        st.session_state.selected_filters = []  # Update selected accounts state
+
+    if st.session_state.chart == "Separated":
+        st.subheader("Separated")
+        st.session_state.filter = st.pills("Filter By", options=list(filter_dict.keys()), default="Account Number")
+        filter_list = return_run_query(query_str=f"""SELECT DISTINCT {filter_dict[st.session_state.filter]} FROM accounts
+                                    INNER JOIN companies ON accounts.company = companies.company
+                                    INNER JOIN financial_plans ON accounts.plan = financial_plans.plan
+                                    INNER JOIN paths ON accounts.fin_path = paths.fin_path
+                                    INNER JOIN company_types ON companies.ctype = company_types.ctype
+                                   WHERE uname = :username""",
                                        params={"username": st.session_state.username})
-    account_options = [account[0] for account in accounts_list]
+        filter_options = [account[0] for account in filter_list]
+        st.session_state.selected_filters = st.multiselect(f"Select {st.session_state.filter}", filter_options, default=filter_options)
+        df= read_query_df(f"""WITH cte AS (SELECT accounts.uname, updates.account_num, updates.money, updates.begda,
+                accounts.company, companies.company_t,
+                accounts.plan, financial_plans.plan_t,
+                accounts.fin_path, paths.fin_path_t,
+                companies.ctype, company_types.ctype_t
+                FROM updates
+                INNER JOIN accounts ON updates.account_num = accounts.account_num
+                INNER JOIN companies ON accounts.company = companies.company
+                INNER JOIN financial_plans ON accounts.plan = financial_plans.plan
+                INNER JOIN paths ON accounts.fin_path = paths.fin_path
+                INNER JOIN company_types ON companies.ctype = company_types.ctype
+                where accounts.uname = :username
+                )
+                SELECT {filter_dict[st.session_state.filter]} as "{st.session_state.filter}",
+                        sum(money) as "Amount Of Money",
+                        begda as "Date"
+                        FROM cte
+                        WHERE {filter_dict[st.session_state.filter]} in :filter_list
+                        GROUP BY {filter_dict[st.session_state.filter]}, begda
+                        ORDER BY begda
+                """, params={"username": st.session_state.username, "filter_list": st.session_state.selected_filters}
+               )
 
-    if left.button("Separated Accounts", use_container_width=True):
-        st.session_state.chart = "Separated Accounts"
-        st.session_state.selected_accounts = []  # Update selected accounts state
-
-    if right.button("Combined Accounts", use_container_width=True):
-        st.session_state.chart = "Combined Accounts"
-        st.session_state.selected_accounts = []  # Update selected accounts state
-
-    if st.session_state.chart == "Separated Accounts":
-        st.subheader("Separated Accounts")
-        st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
-        df=read_query_df(query_str="""SELECT account_num "Account Number",
-                                money "Amount Of Money",
-                                begda "Date"
-                                FROM updates
-                                WHERE account_num in :accounts
-                                ORDER BY begda""",
-                               params={"accounts": st.session_state.selected_accounts, "username": st.session_state.username})
-
-
-    if st.session_state.chart == "Combined Accounts":
-        st.subheader("Combined Accounts")
-        st.session_state.selected_accounts = st.multiselect("Select Accounts", account_options, default=account_options)
-        df=read_query_df(query_str="""SELECT sum(money) "Amount Of Money",
-                                begda "Date"
-                                FROM updates
-                                WHERE account_num in :accounts
-                                GROUP BY begda
-                                ORDER BY begda""",
-                               params={"accounts": st.session_state.selected_accounts, "username": st.session_state.username})
+    if st.session_state.chart == "Combined":
+        st.subheader("Combined")
+        st.session_state.filter = st.pills("Filter By", options=list(filter_dict.keys()), default="Account Number")
+        filter_list = return_run_query(query_str=f"""SELECT DISTINCT {filter_dict[st.session_state.filter]} FROM accounts
+                                    INNER JOIN companies ON accounts.company = companies.company
+                                    INNER JOIN financial_plans ON accounts.plan = financial_plans.plan
+                                    INNER JOIN paths ON accounts.fin_path = paths.fin_path
+                                    INNER JOIN company_types ON companies.ctype = company_types.ctype
+                                   WHERE uname = :username""",
+                                       params={"username": st.session_state.username})
+        filter_options = [account[0] for account in filter_list]
+        st.session_state.selected_filters = st.multiselect(f"Select {st.session_state.filter}", filter_options, default=filter_options)
+        df=read_query_df(query_str=f"""WITH cte AS (SELECT accounts.uname, updates.account_num, updates.money, updates.begda,
+                                        accounts.company, companies.company_t,
+                                        accounts.plan, financial_plans.plan_t,
+                                        accounts.fin_path, paths.fin_path_t,
+                                        companies.ctype, company_types.ctype_t
+                                        FROM updates
+                                        INNER JOIN accounts ON updates.account_num = accounts.account_num
+                                        INNER JOIN companies ON accounts.company = companies.company
+                                        INNER JOIN financial_plans ON accounts.plan = financial_plans.plan
+                                        INNER JOIN paths ON accounts.fin_path = paths.fin_path
+                                        INNER JOIN company_types ON companies.ctype = company_types.ctype
+                                        where accounts.uname = :username
+                                        )
+                                    SELECT sum(money) as "Amount Of Money",
+                                    begda as "Date"
+                                    FROM cte
+                                    WHERE {filter_dict[st.session_state.filter]} IN :filter_list
+                                    GROUP BY begda
+                                    ORDER BY begda""",
+                               params={"username": st.session_state.username, "filter_list": st.session_state.selected_filters})
 
 
     try:
-        fig = px.line(df, x="Date", y="Amount Of Money", color="Account Number" if st.session_state.chart == "Separated Accounts" else None)
+        fig = px.line(df, x="Date", y="Amount Of Money", color=st.session_state.filter if st.session_state.chart == "Separated" else None)
         fig.update_xaxes(tickformat="%b %Y", dtick="M1")
         st.plotly_chart(fig, use_container_width=True)
     except NameError:

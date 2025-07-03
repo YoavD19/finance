@@ -67,6 +67,10 @@ def cache_read_query(query_str, params=None):
     
     return return_run_query(query_str, params)
 
+@cache_data
+def cache_general_data(data):
+    return data
+
 def hash_password(password):
     """Hash a password using bcrypt."""
     salt = bcrypt.gensalt()
